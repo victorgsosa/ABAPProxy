@@ -51,6 +51,7 @@ CLASS zcl_proxy_factory DEFINITION
         VALUE(r_result) TYPE string.
     METHODS generate_method_definition
       IMPORTING
+        i_objectdescr type ref to cl_abap_objectdescr
         i_method      TYPE abap_methdescr
       RETURNING
         VALUE(r_code) TYPE zcl_proxy_helper=>code_lines.
@@ -95,6 +96,7 @@ CLASS zcl_proxy_factory DEFINITION
         c_code   TYPE zcl_proxy_helper=>code_lines.
     METHODS generate_definition_parameters
       IMPORTING
+        i_objectdescr type ref to cl_abap_objectdescr
         i_method        TYPE abap_methdescr
       RETURNING
         VALUE(r_result) TYPE zcl_proxy_helper=>code_lines.
@@ -105,6 +107,7 @@ CLASS zcl_proxy_factory DEFINITION
         VALUE(r_result) TYPE zcl_proxy_helper=>code_lines.
     METHODS generate_parameter_definition
       IMPORTING
+        i_objectdescr type ref to cl_abap_objectdescr
         i_method        TYPE abap_methdescr
         i_parameter     TYPE abap_parmdescr
       RETURNING
@@ -197,7 +200,7 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
   METHOD generate_method_definition.
     IF i_method-name = constructor_name.
       APPEND |methods { i_method-name }| TO r_code.
-      APPEND LINES OF generate_definition_parameters( i_method ) TO r_code.
+      APPEND LINES OF generate_definition_parameters( i_objectdescr = i_objectdescr i_method = i_method ) TO r_code.
       APPEND '.' TO r_code.
     ELSE.
       APPEND |methods { i_method-name } redefinition.| TO r_code.
@@ -238,12 +241,12 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
     APPEND LINES OF VALUE zcl_proxy_helper=>code_lines( FOR interface IN me->interfaces ( generate_interface( interface ) ) ) TO r_code.
     DATA(public_methods) = get_methods_by_visibility( i_objectdescr = me->super_class i_visibility = cl_abap_objectdescr=>public ).
     LOOP AT public_methods INTO DATA(public_method).
-      APPEND LINES OF generate_method_definition( public_method ) TO r_code.
+      APPEND LINES OF generate_method_definition( i_objectdescr = me->super_class i_method = public_method ) TO r_code.
     ENDLOOP.
     APPEND 'protected section.' TO r_code.
     DATA(protected_methods) = get_methods_by_visibility( i_objectdescr = me->super_class i_visibility = cl_abap_objectdescr=>protected ).
     LOOP AT protected_methods INTO DATA(protected_method).
-      APPEND LINES OF generate_method_definition( protected_method ) TO r_code.
+      APPEND LINES OF generate_method_definition( i_objectdescr = me->super_class i_method = protected_method ) TO r_code.
     ENDLOOP.
     APPEND 'private section.' TO r_code.
     APPEND 'data invocation_handler type ref to zif_invocation_handler.' TO r_code.
@@ -391,7 +394,7 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
       APPEND LINES OF VALUE zcl_proxy_helper=>code_lines(
           FOR parameter IN i_method-parameters
           WHERE ( parm_kind = cl_abap_objectdescr=>importing )
-          ( generate_parameter_definition( i_method = i_method i_parameter = parameter ) )
+          ( generate_parameter_definition( i_objectdescr = i_objectdescr i_method = i_method i_parameter = parameter ) )
       ) TO r_result.
     ENDIF.
     IF line_exists( i_method-parameters[ parm_kind = cl_abap_objectdescr=>exporting ] ).
@@ -399,7 +402,7 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
       APPEND LINES OF VALUE zcl_proxy_helper=>code_lines(
           FOR parameter IN i_method-parameters
           WHERE ( parm_kind = cl_abap_objectdescr=>exporting )
-          ( generate_parameter_definition( i_method = i_method i_parameter = parameter ) )
+          ( generate_parameter_definition( i_objectdescr = i_objectdescr i_method = i_method i_parameter = parameter ) )
       ) TO r_result.
     ENDIF.
     IF line_exists( i_method-parameters[ parm_kind = cl_abap_objectdescr=>changing ] ).
@@ -407,7 +410,7 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
       APPEND LINES OF VALUE zcl_proxy_helper=>code_lines(
           FOR parameter IN i_method-parameters
           WHERE ( parm_kind = cl_abap_objectdescr=>changing )
-          ( generate_parameter_definition( i_method = i_method i_parameter = parameter ) )
+          ( generate_parameter_definition( i_objectdescr = i_objectdescr i_method = i_method i_parameter = parameter ) )
       ) TO r_result.
     ENDIF.
     IF line_exists( i_method-parameters[ parm_kind = cl_abap_objectdescr=>returning ] ).
@@ -415,7 +418,7 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
       APPEND LINES OF VALUE zcl_proxy_helper=>code_lines(
           FOR parameter IN i_method-parameters
           WHERE ( parm_kind = cl_abap_objectdescr=>returning )
-          ( generate_parameter_definition( i_method = i_method i_parameter = parameter ) )
+          ( generate_parameter_definition( i_objectdescr = i_objectdescr i_method = i_method i_parameter = parameter ) )
       ) TO r_result.
     ENDIF.
   ENDMETHOD.
@@ -459,11 +462,7 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
 
   METHOD generate_parameter_definition.
     TRY.
-        DATA(parameter_type) = cl_oo_object=>get_instance( CONV #( me->super_class->get_relative_name( ) ) )->get_parameter_type( cpdname = i_method-name sconame = i_parameter-name ).
-      CATCH cx_class_error INTO DATA(exception).
-        RAISE EXCEPTION TYPE zcx_proxy
-          EXPORTING
-            previous = exception.
+        data(parameter_type) = i_objectdescr->get_method_parameter_type( p_method_name = i_method-name p_parameter_name = i_parameter-name ).
     ENDTRY.
     r_result = SWITCH string( i_parameter-by_value WHEN abap_true THEN 'VALUE(' ELSE '' ) &&
                i_parameter-name &&
@@ -472,7 +471,7 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
                 WHEN cl_abap_typedescr=>typekind_oref OR cl_abap_typedescr=>typekind_dref THEN | type ref to |
                 ELSE | type |
                ) &&
-               parameter_type-type &&
+               parameter_type->get_relative_name( ) &&
                SWITCH string( i_parameter-is_optional WHEN abap_true THEN | optional| ELSE '' ).
 
   ENDMETHOD.
