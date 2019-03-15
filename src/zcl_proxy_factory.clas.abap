@@ -51,7 +51,7 @@ CLASS zcl_proxy_factory DEFINITION
         VALUE(r_result) TYPE string.
     METHODS generate_method_definition
       IMPORTING
-        i_objectdescr type ref to cl_abap_objectdescr
+        i_objectdescr TYPE REF TO cl_abap_objectdescr
         i_method      TYPE abap_methdescr
       RETURNING
         VALUE(r_code) TYPE zcl_proxy_helper=>code_lines.
@@ -96,7 +96,7 @@ CLASS zcl_proxy_factory DEFINITION
         c_code   TYPE zcl_proxy_helper=>code_lines.
     METHODS generate_definition_parameters
       IMPORTING
-        i_objectdescr type ref to cl_abap_objectdescr
+        i_objectdescr   TYPE REF TO cl_abap_objectdescr
         i_method        TYPE abap_methdescr
       RETURNING
         VALUE(r_result) TYPE zcl_proxy_helper=>code_lines.
@@ -107,7 +107,7 @@ CLASS zcl_proxy_factory DEFINITION
         VALUE(r_result) TYPE zcl_proxy_helper=>code_lines.
     METHODS generate_parameter_definition
       IMPORTING
-        i_objectdescr type ref to cl_abap_objectdescr
+        i_objectdescr   TYPE REF TO cl_abap_objectdescr
         i_method        TYPE abap_methdescr
         i_parameter     TYPE abap_parmdescr
       RETURNING
@@ -371,7 +371,7 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
     LOOP AT i_method-parameters INTO DATA(parameter) .
       APPEND |assign ('{ parameter-name }') to <parameter>. | TO c_code.
       APPEND |get reference of <parameter> into r_parameter. | TO c_code.
-      APPEND |insert value abap_parmbind( name = '{ parameter-name }' kind = '{ parameter-parm_kind }' value = r_parameter ) into table parameters.| TO c_code.
+      APPEND |insert value abap_parmbind( name = '{ parameter-name }' value = r_parameter ) into table parameters.| TO c_code.
     ENDLOOP.
 
   ENDMETHOD.
@@ -462,18 +462,21 @@ CLASS zcl_proxy_factory IMPLEMENTATION.
 
   METHOD generate_parameter_definition.
     TRY.
-        data(parameter_type) = i_objectdescr->get_method_parameter_type( p_method_name = i_method-name p_parameter_name = i_parameter-name ).
-    ENDTRY.
-    r_result = SWITCH string( i_parameter-by_value WHEN abap_true THEN 'VALUE(' ELSE '' ) &&
-               i_parameter-name &&
-               SWITCH string( i_parameter-by_value WHEN abap_true THEN ')' ELSE '' ) &&
-               SWITCH string( i_parameter-type_kind
-                WHEN cl_abap_typedescr=>typekind_oref OR cl_abap_typedescr=>typekind_dref THEN | type ref to |
-                ELSE | type |
-               ) &&
-               parameter_type->get_relative_name( ) &&
-               SWITCH string( i_parameter-is_optional WHEN abap_true THEN | optional| ELSE '' ).
+        DATA(parameter_type) = cl_oo_object=>get_instance(
+            clsname = CONV #( i_objectdescr->get_relative_name( ) )
+            )->get_parameter_type( cpdname = i_method-name sconame = i_parameter-name ).
 
+        r_result = SWITCH string( i_parameter-by_value WHEN abap_true THEN 'VALUE(' ELSE '' ) &&
+                   i_parameter-name &&
+                   SWITCH string( i_parameter-by_value WHEN abap_true THEN ')' ELSE '' ) &&
+                   SWITCH string( i_parameter-type_kind
+                    WHEN cl_abap_typedescr=>typekind_oref OR cl_abap_typedescr=>typekind_dref THEN | type ref to |
+                    ELSE | type |
+                   ) &&
+                   parameter_type-type &&
+                   SWITCH string( i_parameter-is_optional WHEN abap_true THEN | optional| ELSE '' ).
+      CATCH cx_component_error cx_class_error.
+    ENDTRY.
   ENDMETHOD.
 
 
